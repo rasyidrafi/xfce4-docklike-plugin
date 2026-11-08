@@ -82,6 +82,7 @@ public:
 
 	bool mPinned;
 	bool mActive;
+	GroupWindow* mAssignedWindow;
 
 	uint mTolerablePointerDistance;
 	uint mTopWindowIndex;

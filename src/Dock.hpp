@@ -22,12 +22,17 @@
 #include <string>
 
 class Group;
+class GroupWindow;
 
 namespace Dock
 {
 	void init();
 
 	Group* prepareGroup(std::shared_ptr<AppInfo> appInfo);
+	Group* prepareWindowGroup(std::shared_ptr<AppInfo> appInfo, GroupWindow* window);
+	void releaseWindowGroup(Group* group, GroupWindow* window);
+	void setPinned(Group* group, bool pinned);
+	void transferPin(Group* group);
 
 	void moveButton(Group* moving, Group* dest);
 	void savePinned();

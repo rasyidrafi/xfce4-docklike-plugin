@@ -15,6 +15,7 @@ Group::Group(std::shared_ptr<AppInfo> appInfo, bool pinned) : mGroupMenu(this)
 	mIconPixbuf = nullptr;
 	mAppInfo = appInfo;
 	mPinned = pinned;
+	mAssignedWindow = nullptr;
 	mTopWindowIndex = 0;
 	mActive = false;
 

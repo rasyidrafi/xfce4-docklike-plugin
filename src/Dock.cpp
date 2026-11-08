@@ -6,14 +6,18 @@
  */
 
 #include "Dock.hpp"
+#include "WindowGrouping.hpp"
 #ifdef ENABLE_X11
 #include "Hotkeys.hpp"
 #endif
+
+#include <algorithm>
 
 namespace Dock
 {
 	GtkWidget* mBox;
 	Store::KeyStore<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> mGroups;
+	bool mDrawingGroups = false;
 
 	int mPanelSize;
 	int mIconSize;
@@ -44,6 +48,101 @@ namespace Dock
 		return group.get();
 	}
 
+	Group* prepareWindowGroup(std::shared_ptr<AppInfo> appInfo, GroupWindow* window)
+	{
+		Group* group = mGroups.findIf([&appInfo, window](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> bool {
+			return entry.first == appInfo && entry.second->mAssignedWindow == window;
+		}).get();
+		if (group != nullptr)
+			return group;
+
+		// In ungrouped mode, consume an idle pin to represent the first window.
+		// Further windows get their own group/button.
+		group = mGroups.findIf([&appInfo](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> bool {
+			return entry.first == appInfo && entry.second->mPinned && entry.second->mAssignedWindow == nullptr;
+		}).get();
+		if (group != nullptr)
+		{
+			group->mAssignedWindow = window;
+			return group;
+		}
+
+		// Reuse an empty window slot where possible; no two live windows share it.
+		group = mGroups.findIf([&appInfo](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> bool {
+			return entry.first == appInfo && !entry.second->mPinned && entry.second->mAssignedWindow == nullptr;
+		}).get();
+		if (group != nullptr)
+		{
+			group->mAssignedWindow = window;
+			return group;
+		}
+
+		std::shared_ptr<Group> newGroup = std::make_shared<Group>(appInfo, false);
+		mGroups.push(appInfo, newGroup);
+		gtk_container_add(GTK_CONTAINER(mBox), newGroup->mButton);
+		newGroup->mAssignedWindow = window;
+		return newGroup.get();
+	}
+
+	void releaseWindowGroup(Group* group, GroupWindow* window)
+	{
+		if (group->mAssignedWindow == window)
+			group->mAssignedWindow = nullptr;
+	}
+
+	void setPinned(Group* group, bool pinned)
+	{
+		if (Settings::ungroupWindows && pinned)
+		{
+			mGroups.forEach([group](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> void {
+				if (entry.first == group->mAppInfo && entry.second.get() != group && entry.second->mPinned)
+				{
+					entry.second->mPinned = false;
+					entry.second->updateStyle();
+				}
+			});
+		}
+
+		group->mPinned = pinned;
+		group->updateStyle();
+		savePinned();
+	}
+
+	void transferPin(Group* group)
+	{
+		if (mDrawingGroups || !Settings::ungroupWindows)
+			return;
+
+		Group* pin = mGroups.findIf([group](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> bool {
+			return entry.first == group->mAppInfo && WindowGrouping::isIdlePin(entry.second->mPinned,
+				entry.second->mAssignedWindow != nullptr, entry.second->mWindowsCount);
+		}).get();
+		if (pin == nullptr)
+			return;
+
+		Group* next = mGroups.findIf([group, pin](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> bool {
+			return entry.first == group->mAppInfo && entry.second.get() != pin &&
+				WindowGrouping::hasRepresentedWindow(entry.second->mWindowsCount);
+		}).get();
+
+		if (!WindowGrouping::isIdlePin(pin->mPinned, pin->mAssignedWindow != nullptr, pin->mWindowsCount))
+			return;
+
+		if (WindowGrouping::shouldTransferPin(Settings::ungroupWindows,
+			WindowGrouping::isIdlePin(pin->mPinned, pin->mAssignedWindow != nullptr, pin->mWindowsCount), next != nullptr))
+		{
+			int pinPosition = Help::Gtk::getChildPosition(GTK_CONTAINER(mBox), pin->mButton);
+			int nextPosition = Help::Gtk::getChildPosition(GTK_CONTAINER(mBox), next->mButton);
+			pin->mPinned = false;
+			pin->updateStyle();
+			next->mPinned = true;
+			if (pinPosition < nextPosition)
+				gtk_box_reorder_child(GTK_BOX(mBox), next->mButton, pinPosition);
+			next->updateStyle();
+			savePinned();
+		}
+	}
+
 	void moveButton(Group* moving, Group* dest)
 	{
 		int startpos = Help::Gtk::getChildPosition(GTK_CONTAINER(mBox), moving->mButton);
@@ -67,7 +166,8 @@ namespace Dock
 			GtkWidget* widget = (GtkWidget*)child->data;
 			Group* group = (Group*)g_object_get_data(G_OBJECT(widget), "group");
 
-			if (group->mPinned && g_file_test(group->mAppInfo->path.c_str(), G_FILE_TEST_IS_REGULAR))
+			if (group->mPinned && g_file_test(group->mAppInfo->path.c_str(), G_FILE_TEST_IS_REGULAR) &&
+				std::find(pinnedList.begin(), pinnedList.end(), group->mAppInfo->id) == pinnedList.end())
 				pinnedList.push_back(group->mAppInfo->id);
 		}
 
@@ -77,9 +177,12 @@ namespace Dock
 
 	void drawGroups()
 	{
-		// Remove old groups
+		mDrawingGroups = true;
+		// Destroy old window objects while their associated groups still exist.
 		Xfw::mGroupWindows.clear();
+		// Remove old groups
 		mGroups.clear();
+		mDrawingGroups = false;
 
 		// Add pinned groups
 		std::list<std::string> pinnedApps = Settings::pinnedAppList;
@@ -88,10 +191,15 @@ namespace Dock
 		while (it != pinnedApps.end())
 		{
 			std::shared_ptr<AppInfo> appInfo = AppInfos::search(Help::String::toLowercase(*it));
-			std::shared_ptr<Group> group = std::make_shared<Group>(appInfo, true);
-
-			mGroups.push(appInfo, group);
-			gtk_container_add(GTK_CONTAINER(mBox), group->mButton);
+			bool alreadyPinned = mGroups.findIf([&appInfo](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> bool {
+				return entry.first == appInfo && entry.second->mPinned;
+			}) != nullptr;
+			if (!alreadyPinned)
+			{
+				std::shared_ptr<Group> group = std::make_shared<Group>(appInfo, true);
+				mGroups.push(appInfo, group);
+				gtk_container_add(GTK_CONTAINER(mBox), group->mButton);
+			}
 			++it;
 		}
 

@@ -18,7 +18,7 @@ GroupWindow::GroupWindow(XfwWindow* xfwWindow)
 	g_debug("NEW: %s", groupName.c_str());
 
 	std::shared_ptr<AppInfo> appInfo = AppInfos::search(groupName);
-	mGroup = Dock::prepareGroup(appInfo);
+	mGroup = Settings::ungroupWindows ? Dock::prepareWindowGroup(appInfo, this) : Dock::prepareGroup(appInfo);
 
 	//--------------------------------------------------
 
@@ -57,12 +57,16 @@ GroupWindow::GroupWindow(XfwWindow* xfwWindow)
 	g_signal_connect(G_OBJECT(mXfwWindow), "class-changed",
 		G_CALLBACK(+[](XfwWindow* window, GroupWindow* me) {
 			std::string _groupName = Xfw::getGroupName(me);
-			Group* group = Dock::prepareGroup(AppInfos::search(_groupName));
+			std::shared_ptr<AppInfo> newAppInfo = AppInfos::search(_groupName);
+			Group* oldGroup = me->mGroup;
+			Group* group = Settings::ungroupWindows ? Dock::prepareWindowGroup(newAppInfo, me) : Dock::prepareGroup(newAppInfo);
 			if (group != me->mGroup)
 			{
 				me->leaveGroup();
+				Dock::releaseWindowGroup(oldGroup, me);
 				me->mGroup = group;
 				me->getInGroup();
+				Dock::transferPin(oldGroup);
 				Xfw::setActiveWindow();
 			}
 		}),
@@ -99,17 +103,34 @@ void GroupWindow::getInGroup()
 {
 	if (mGroupAssociated)
 		return;
+	if (Settings::ungroupWindows)
+	{
+		Group* windowGroup = Dock::prepareWindowGroup(mGroup->mAppInfo, this);
+		if (windowGroup != mGroup)
+		{
+			Group* oldGroup = mGroup;
+			mGroup = windowGroup;
+			Dock::transferPin(oldGroup);
+		}
+	}
 	mGroup->add(this);
 	mGroupAssociated = true;
+	Dock::transferPin(mGroup);
 }
 
 void GroupWindow::leaveGroup()
 {
 	if (!mGroupAssociated)
+	{
+		Dock::releaseWindowGroup(mGroup, this);
+		Dock::transferPin(mGroup);
 		return;
+	}
 	mGroup->remove(this);
 	mGroup->onWindowUnactivate();
 	mGroupAssociated = false;
+	Dock::releaseWindowGroup(mGroup, this);
+	Dock::transferPin(mGroup);
 }
 
 void GroupWindow::onActivate()

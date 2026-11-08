@@ -38,6 +38,7 @@ namespace Settings
 	extern State<bool> onlyDisplayScreen;
 	extern State<bool> showPreviews;
 	extern State<bool> showWindowCount;
+	extern State<bool> ungroupWindows;
 	extern State<int> middleButtonBehavior;
 
 	extern State<int> indicatorOrientation;

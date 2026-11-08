@@ -107,6 +107,14 @@ namespace SettingsDialog
 			}),
 			nullptr);
 
+		GObject* ungroupWindows = gtk_builder_get_object(builder, "c_ungroupWindows");
+		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ungroupWindows), Settings::ungroupWindows);
+		g_signal_connect(ungroupWindows, "toggled",
+			G_CALLBACK(+[](GtkToggleButton* _ungroupWindows) {
+				Settings::ungroupWindows.set(gtk_toggle_button_get_active(_ungroupWindows));
+			}),
+			nullptr);
+
 		GObject* middleButtonBehavior = gtk_builder_get_object(builder, "co_middleButtonBehavior");
 		gtk_combo_box_set_active(GTK_COMBO_BOX(middleButtonBehavior), Settings::middleButtonBehavior);
 		g_signal_connect(middleButtonBehavior, "changed",

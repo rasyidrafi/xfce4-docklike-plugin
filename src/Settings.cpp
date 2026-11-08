@@ -37,6 +37,7 @@ namespace Settings
 	State<std::list<std::string>> pinnedAppList;
 
 	State<bool> showWindowCount;
+	State<bool> ungroupWindows;
 	State<int> dockSize;
 	State<double> previewScale;
 	State<int> previewSleep;
@@ -74,6 +75,14 @@ namespace Settings
 		showWindowCount.setup(g_key_file_get_boolean(file, "user", "showWindowCount", nullptr),
 			[](bool _showWindowCount) -> void {
 				g_key_file_set_boolean(mFile.get(), "user", "showWindowCount", _showWindowCount);
+				saveFile();
+
+				Dock::drawGroups();
+			});
+
+		ungroupWindows.setup(g_key_file_get_boolean(file, "user", "ungroupWindows", nullptr),
+			[](bool _ungroupWindows) -> void {
+				g_key_file_set_boolean(mFile.get(), "user", "ungroupWindows", _ungroupWindows);
 				saveFile();
 
 				Dock::drawGroups();

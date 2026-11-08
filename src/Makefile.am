@@ -20,6 +20,8 @@ libdocklike_la_SOURCES =							\
 		SettingsDialog.cpp SettingsDialog.hpp		\
 		State.tpp 									\
 		Store.tpp									\
+		WindowIdentity.hpp						\
+		WindowGrouping.hpp						\
 		register.c									\
 		_gresources.xml _dialogs.ui				\
 		_gresources.c
@@ -69,6 +71,11 @@ $(plugins_DATA): $(plugins_in_files) Makefile
 	$(AM_V_GEN)$(MSGFMT) --desktop --template $< -d $(top_srcdir)/po -o $@
 
 EXTRA_DIST = $(plugins_in_files)
+
+check_PROGRAMS = test-window-identity test-window-grouping
+TESTS = $(check_PROGRAMS)
+test_window_identity_SOURCES = test-window-identity.cpp WindowIdentity.hpp
+test_window_grouping_SOURCES = test-window-grouping.cpp WindowGrouping.hpp
 
 CLEANFILES = $(NULL)
 DISTCLEANFILES = docklike.desktop

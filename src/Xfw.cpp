@@ -10,6 +10,7 @@
 #endif
 
 #include "Xfw.hpp"
+#include "WindowIdentity.hpp"
 
 namespace Xfw
 {
@@ -23,8 +24,9 @@ namespace Xfw
 		{
 			// Xfw method const char *
 			const gchar* const* class_ids = xfw_window_get_class_ids(xfwWindow);
-			if (!xfce_str_is_empty(class_ids[0]))
-				return class_ids[0];
+			const gchar* class_id = WindowIdentity::preferredClassId(class_ids);
+			if (class_id != nullptr)
+				return class_id;
 
 			// proc/{pid}/cmdline method
 			XfwApplicationInstance* instance = xfw_application_get_instance(xfw_window_get_application(xfwWindow), xfwWindow);
@@ -231,10 +233,7 @@ namespace Xfw
 
 				g_signal_connect(G_OBJECT(pinToggle), "toggled",
 					G_CALLBACK(+[](GtkCheckMenuItem* menuitem, Group* _group) {
-						_group->mPinned = !_group->mPinned;
-						if (!_group->mPinned)
-							_group->updateStyle();
-						Dock::savePinned();
+						Dock::setPinned(_group, !_group->mPinned);
 					}),
 					group);
 
@@ -270,9 +269,7 @@ namespace Xfw
 
 		g_signal_connect(G_OBJECT(remove), "activate",
 			G_CALLBACK(+[](GtkMenuItem* menuitem, Group* _group) {
-				_group->mPinned = false;
-				Dock::savePinned();
-				Dock::drawGroups();
+				Dock::setPinned(_group, false);
 			}),
 			group);
 

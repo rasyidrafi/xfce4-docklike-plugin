@@ -62,6 +62,7 @@ namespace AppInfos
 	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoWMClasses;
 	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoIds;
 	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoNames;
+	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoUnknown;
 	Store::AutoPtr<GAppInfoMonitor> mMonitor;
 
 	static void findXDGDirectories()
@@ -192,6 +193,7 @@ namespace AppInfos
 				mAppInfoIds.clear();
 				mAppInfoNames.clear();
 				mAppInfoWMClasses.clear();
+				mAppInfoUnknown.clear();
 				loadXDGDirectories();
 				Dock::drawGroups();
 			}),
@@ -207,6 +209,7 @@ namespace AppInfos
 		mAppInfoWMClasses.clear();
 		mAppInfoIds.clear();
 		mAppInfoNames.clear();
+		mAppInfoUnknown.clear();
 		mMonitor.reset();
 	}
 
@@ -228,6 +231,7 @@ namespace AppInfos
 
 	std::shared_ptr<AppInfo> search(std::string id)
 	{
+		id = Help::String::toLowercase(Help::String::trim(id));
 		groupNameTransform(id);
 
 		g_debug("Searching a match for '%s'", id.c_str());
@@ -297,6 +301,12 @@ namespace AppInfos
 
 		g_debug("No match");
 
-		return std::make_shared<AppInfo>("", "", "", id);
+		ai = mAppInfoUnknown.get(id);
+		if (ai == nullptr)
+		{
+			ai = std::make_shared<AppInfo>("", "", "", id);
+			mAppInfoUnknown.set(id, ai);
+		}
+		return ai;
 	}
 } // namespace AppInfos
