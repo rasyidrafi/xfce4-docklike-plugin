@@ -194,7 +194,7 @@ namespace Xfw
 		auto app = group->mAppInfo;
 		auto more = groupWindow ? xfw_window_action_menu_new(groupWindow->mXfwWindow) : gtk_menu_new();
 		if (!app->path.empty()) {
-			auto primary = append(menu, app->supportsNewWindow() ? _("New Window") : _("Open Application"));
+			auto primary = append(menu, app->supportsNewWindow() ? _("New Window  (Shift+Click)") : _("Open Application"));
 			g_signal_connect(primary, "activate", G_CALLBACK(+[](GtkMenuItem*, AppInfo* info) { info->launchAnother(); }), app.get());
 			for (auto actions = app->get_actions(); actions && *actions; ++actions) {
 				if (g_str_equal(*actions, "new-window")) continue;

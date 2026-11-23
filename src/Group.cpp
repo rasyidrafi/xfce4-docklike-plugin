@@ -871,7 +871,7 @@ void Group::onButtonRelease(GdkEventButton* event)
 		}
 		case BEHAVIOR_LAUNCH_NEW:
 		{
-			mAppInfo->launch();
+			mAppInfo->launchAnother();
 			break;
 		}
 		case BEHAVIOR_DO_NOTHING:
