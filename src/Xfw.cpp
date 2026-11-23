@@ -209,6 +209,7 @@ namespace Xfw
 			auto item = append(parent, label);
 			g_signal_connect_data(item, "activate", G_CALLBACK(+[](GtkMenuItem*, Callback* f) { (*f)(); }),
 				new Callback(std::move(fn)), +[](gpointer data, GClosure*) { delete static_cast<Callback*>(data); }, GConnectFlags(0));
+			return item;
 		};
 		auto app = group->mAppInfo;
 		using Window = std::shared_ptr<XfwWindow>;
@@ -252,6 +253,17 @@ namespace Xfw
 			});
 			auto editor = g_find_program_in_path("exo-desktop-item-edit");
 			if (editor) { g_free(editor); action(more, _("Edit Launcher"), [app] { app->edit(); }); }
+		}
+		bool vertical = gtk_orientable_get_orientation(GTK_ORIENTABLE(Dock::mBox)) == GTK_ORIENTATION_VERTICAL;
+		bool rtl = !vertical && gtk_widget_get_direction(Dock::mBox) == GTK_TEXT_DIR_RTL;
+		std::weak_ptr<Group> owner = Dock::mGroups.findIf([group](const auto& e) { return e.second.get() == group; });
+		for (int step : {-1, 1}) {
+			const char* label = vertical ? (step < 0 ? _("Move Up") : _("Move Down")) :
+				((step < 0) != rtl ? _("Move Left") : _("Move Right"));
+			auto item = action(more, label, [owner, step] {
+				if (auto g = owner.lock()) if (auto dest = Dock::visibleNeighbor(g.get(), step)) Dock::moveButton(g.get(), dest);
+			});
+			gtk_widget_set_sensitive(item, Dock::visibleNeighbor(group, step) != nullptr);
 		}
 		auto children = gtk_container_get_children(GTK_CONTAINER(more));
 		if (children) gtk_menu_item_set_submenu(GTK_MENU_ITEM(append(menu, _("More Options"))), more);

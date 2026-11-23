@@ -81,7 +81,7 @@ void AppInfo::edit()
 namespace AppInfos
 {
 	std::list<std::string> mXdgDataDirs;
-	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoWMClasses;
+	std::map<std::string, std::vector<std::shared_ptr<AppInfo>>> mAppInfoWMClasses;
 	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoIds;
 	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoNames;
 	Store::Map<const std::string, std::shared_ptr<AppInfo>> mAppInfoUnknown;
@@ -184,7 +184,7 @@ namespace AppInfos
 		if (wmclass_ != nullptr && wmclass_[0] != '\0')
 		{
 			wmclass = Help::String::toLowercase(Help::String::trim(wmclass_));
-			mAppInfoWMClasses.set(wmclass, info);
+			mAppInfoWMClasses[wmclass].push_back(info);
 		}
 		g_free(wmclass_);
 	}
@@ -272,13 +272,16 @@ namespace AppInfos
 
 		g_debug("Searching a match for '%s'", id.c_str());
 
-		std::shared_ptr<AppInfo> ai = mAppInfoWMClasses.get(id);
-		if (ai != nullptr)
-		{
-			g_debug("App WMClass match");
-			return ai;
+		auto matches = mAppInfoWMClasses.find(id);
+		if (matches != mAppInfoWMClasses.end()) {
+			const auto& apps = matches->second;
+			if (apps.size() == 1) return apps.front();
+			for (const auto& pin : Settings::pinnedAppList.get())
+				for (const auto& app : apps) if (app->id == pin) return app;
+			for (const auto& app : apps) if (Help::String::toLowercase(app->id) == id) return app;
+			return *std::min_element(apps.begin(), apps.end(), [](const auto& a, const auto& b) { return a->id < b->id; });
 		}
-
+		std::shared_ptr<AppInfo> ai;
 		ai = mAppInfoIds.get(id);
 		if (ai != nullptr)
 		{

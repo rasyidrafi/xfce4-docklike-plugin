@@ -36,6 +36,10 @@ namespace Dock
 	void setPinned(Group* group, bool pinned);
 	void transferPin(Group* group);
 
+	Group* dropTarget(GtkWidget* source, int x, int y);
+	void highlightDrop(GtkWidget* source, int x, int y);
+	void clearDropHighlight();
+	Group* visibleNeighbor(Group* group, int step);
 	void moveButton(Group* moving, Group* dest);
 	void savePinned();
 	void drawGroups();

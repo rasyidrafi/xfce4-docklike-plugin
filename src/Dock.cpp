@@ -155,6 +155,53 @@ namespace Dock
 		}
 	}
 
+	Group* dropTarget(GtkWidget* source, int x, int y)
+	{
+		int bx, by;
+		if (!gtk_widget_translate_coordinates(source, mBox, x, y, &bx, &by)) return nullptr;
+		return mGroups.findIf([&](const auto& e) {
+			auto button = e.second->mButton;
+			int tx, ty;
+			return gtk_widget_get_mapped(button) && gtk_widget_translate_coordinates(mBox, button, bx, by, &tx, &ty) &&
+				tx >= 0 && ty >= 0 && tx < gtk_widget_get_allocated_width(button) && ty < gtk_widget_get_allocated_height(button);
+		}).get();
+	}
+
+	static std::weak_ptr<Group> highlighted;
+	void clearDropHighlight()
+	{
+		if (auto old = highlighted.lock()) gtk_drag_unhighlight(old->mButton);
+		highlighted.reset();
+	}
+
+	void highlightDrop(GtkWidget* source, int x, int y)
+	{
+		auto dest = dropTarget(source, x, y);
+		if (dest && dest->mButton == source) dest = nullptr;
+		if (highlighted.lock().get() == dest) return;
+		clearDropHighlight();
+		if (dest) {
+			highlighted = mGroups.findIf([dest](const auto& e) { return e.second.get() == dest; });
+			gtk_drag_highlight(dest->mButton);
+		}
+	}
+
+	Group* visibleNeighbor(Group* group, int step)
+	{
+		auto children = gtk_container_get_children(GTK_CONTAINER(mBox));
+		auto node = g_list_find(children, group->mButton);
+		Group* neighbor = nullptr;
+		while (node && (node = step < 0 ? node->prev : node->next)) {
+			auto widget = GTK_WIDGET(node->data);
+			if (gtk_widget_get_visible(widget)) {
+				neighbor = static_cast<Group*>(g_object_get_data(G_OBJECT(widget), "group"));
+				if (neighbor) break;
+			}
+		}
+		g_list_free(children);
+		return neighbor;
+	}
+
 	void moveButton(Group* moving, Group* dest)
 	{
 		int startpos = Help::Gtk::getChildPosition(GTK_CONTAINER(mBox), moving->mButton);

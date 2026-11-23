@@ -76,11 +76,9 @@ public:
 	void onMouseLeave();
 	void setMouseLeaveTimeout();
 	bool onDragMotion(GtkWidget* widget, GdkDragContext* context, int x, int y, guint time);
-	void onDragLeave(const GdkDragContext* context, guint time);
-	void onDragDataGet(const GdkDragContext* context, GtkSelectionData* selectionData, guint info, guint time);
-	void onDragDataReceived(const GdkDragContext* context, int x, int y, const GtkSelectionData* selectionData, guint info, guint time);
-	void onDragBegin(GdkDragContext* context);
 
+	bool dragArmed = false, suppressRelease = false;
+	int pressX = 0, pressY = 0;
 	bool mPinned;
 	bool mActive;
 	GroupWindow* mAssignedWindow;
