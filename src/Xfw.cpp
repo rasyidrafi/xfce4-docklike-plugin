@@ -191,7 +191,7 @@ namespace Xfw
 		if (!appInfo->path.empty())
 		{
 			const gchar* const* actions = appInfo->get_actions();
-			for (int i = 0; actions[i]; i++)
+			for (int i = 0; actions && actions[i]; i++)
 			{
 				// Desktop actions get inserted into the menu above all the window manager controls.
 				// We need an extra separator only if the application is running.
@@ -216,7 +216,7 @@ namespace Xfw
 
 			if (group != nullptr)
 			{
-				GtkWidget* pinToggle = gtk_check_menu_item_new_with_label(group->mPinned ? _("Pinned to Dock") : _("Pin to Dock"));
+				GtkWidget* pinToggle = gtk_check_menu_item_new_with_label(group->mPinned ? _("Unpin from Taskbar") : _("Pin to Taskbar"));
 				GtkWidget* editLauncher = gtk_menu_item_new_with_label(_("Edit Launcher"));
 
 				gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(pinToggle), group->mPinned);
@@ -256,6 +256,27 @@ namespace Xfw
 						}),
 						group);
 				}
+			}
+
+			// Promote the native new-window action instead of duplicating it.
+			GtkWidget* primary = nullptr;
+			GList* children = gtk_container_get_children(GTK_CONTAINER(menu));
+			for (GList* item = children; item; item = item->next)
+			{
+				if (g_strcmp0(static_cast<const char*>(g_object_get_data(G_OBJECT(item->data), "action")), "new-window") == 0)
+					primary = GTK_WIDGET(item->data);
+			}
+			g_list_free(children);
+			if (primary)
+				gtk_menu_reorder_child(GTK_MENU(menu), primary, 0);
+			else
+			{
+				const bool multiWindow = appInfo->id == "thunar" || appInfo->id == "xfce4-terminal";
+				primary = gtk_menu_item_new_with_label(multiWindow ? _("New Window") : _("Open Application"));
+				gtk_menu_shell_prepend(GTK_MENU_SHELL(menu), primary);
+				g_signal_connect(G_OBJECT(primary), "activate", G_CALLBACK(+[](GtkMenuItem*, AppInfo* info) {
+					info->launch();
+				}), appInfo.get());
 			}
 
 			gtk_widget_show_all(menu);
