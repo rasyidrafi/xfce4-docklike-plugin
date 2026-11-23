@@ -37,6 +37,7 @@ namespace AppInfos
 {
 	void init();
 	void finalize();
+	std::shared_ptr<AppInfo> byDesktopId(const char* desktopId);
 	std::shared_ptr<AppInfo> search(std::string id);
 } // namespace AppInfos
 

@@ -38,7 +38,7 @@ namespace Plugin
 	extern GdkDisplay* mDisplay;
 
 	void aboutDialog();
-	void remoteEvent(gchar* name, GValue* value);
+	gboolean remoteEvent(gchar* name, GValue* value);
 } // namespace Plugin
 
 #endif // PLUGIN_HPP

@@ -17,6 +17,37 @@ namespace Plugin
 	GdkDevice* mPointer;
 	GdkDisplay* mDisplay;
 
+	static guint busOwner, registration;
+	static GDBusNodeInfo* api;
+	static constexpr const char* interfaceName = "org.xfce.Docklike.Pins1";
+	static constexpr const char* objectPath = "/org/xfce/Docklike/Pins";
+
+	static void handlePinCall(GDBusConnection*, const gchar*, const gchar*, const gchar*,
+		const gchar* method, GVariant* args, GDBusMethodInvocation* invocation, gpointer)
+	{
+		const char* id;
+		gboolean desired = FALSE;
+		bool write = g_str_equal(method, "SetPinned");
+		if (write) g_variant_get(args, "(&sb)", &id, &desired);
+		else g_variant_get(args, "(&s)", &id);
+		auto app = AppInfos::byDesktopId(id);
+		if (!app)
+		{
+			g_dbus_method_invocation_return_error(invocation, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Unknown desktop ID: %s", id);
+			return;
+		}
+		auto pinned = Dock::mGroups.findIf([&app](const auto& entry) { return entry.first == app && entry.second->mPinned; });
+		if (write && desired && !pinned) Dock::setPinned(Dock::prepareGroup(app), true);
+		if (write && !desired && pinned) Dock::setPinned(pinned.get(), false);
+		g_dbus_method_invocation_return_value(invocation, g_variant_new("(b)", write ? desired : pinned != nullptr));
+	}
+
+	static void exportPins(GDBusConnection* bus, const gchar*, gpointer)
+	{
+		static const GDBusInterfaceVTable handlers = {handlePinCall, nullptr, nullptr, {nullptr}};
+		registration = g_dbus_connection_register_object(bus, objectPath, api->interfaces[0], &handlers, nullptr, nullptr, nullptr);
+	}
+
 	static void init(XfcePanelPlugin* xfPlugin)
 	{
 		xfce_textdomain(GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR, nullptr);
@@ -30,6 +61,12 @@ namespace Plugin
 		Xfw::init();
 		Dock::init();
 		Theme::init();
+		api = g_dbus_node_info_new_for_xml("<node><interface name='org.xfce.Docklike.Pins1'>"
+			"<method name='IsPinned'><arg type='s' direction='in'/><arg type='b' direction='out'/></method>"
+			"<method name='SetPinned'><arg type='s' direction='in'/><arg type='b' direction='in'/><arg type='b' direction='out'/></method>"
+			"</interface></node>", nullptr);
+		std::string busName = std::string(interfaceName) + ".Instance" + std::to_string(xfce_panel_plugin_get_unique_id(xfPlugin));
+		busOwner = g_bus_own_name(G_BUS_TYPE_SESSION, busName.c_str(), G_BUS_NAME_OWNER_FLAGS_NONE, exportPins, nullptr, nullptr, nullptr, nullptr);
 #ifdef ENABLE_X11
 		if (GDK_IS_X11_DISPLAY(gdk_display_get_default()))
 			Hotkeys::init();
@@ -67,13 +104,20 @@ namespace Plugin
 			nullptr);
 
 		g_signal_connect(G_OBJECT(mXfPlugin), "remote-event",
-			G_CALLBACK(+[](XfcePanelPlugin* plugin, gchar* name, GValue* value) {
-				remoteEvent(name, value);
+			G_CALLBACK(+[](XfcePanelPlugin* plugin, gchar* name, GValue* value) -> gboolean {
+				return remoteEvent(name, value);
 			}),
 			nullptr);
 
 		g_signal_connect(G_OBJECT(mXfPlugin), "free-data",
 			G_CALLBACK(+[](XfcePanelPlugin* plugin) {
+				if (registration) {
+					auto bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+					if (bus) { g_dbus_connection_unregister_object(bus, registration); g_object_unref(bus); }
+					registration = 0;
+				}
+				g_bus_unown_name(busOwner);
+				g_dbus_node_info_unref(api);
 				Xfw::finalize();
 				Dock::mGroups.clear();
 				AppInfos::finalize();
@@ -114,12 +158,29 @@ namespace Plugin
 			nullptr);
 	}
 
-	void remoteEvent(gchar* name, GValue* value)
+	gboolean remoteEvent(gchar* name, GValue* value)
 	{
 		if (g_strcmp0(name, "settings") == 0)
 			SettingsDialog::popup();
 		else if (g_strcmp0(name, "about") == 0)
 			aboutDialog();
+		else if (g_strcmp0(name, "pin") == 0 || g_strcmp0(name, "unpin") == 0)
+		{
+			auto app = AppInfos::byDesktopId(value && G_VALUE_HOLDS_STRING(value) ? g_value_get_string(value) : nullptr);
+			if (!app)
+				return FALSE;
+			auto pinned = Dock::mGroups.findIf([&app](const auto& entry) {
+				return entry.first == app && entry.second->mPinned;
+			});
+			bool pin = g_strcmp0(name, "pin") == 0;
+			if (pin && !pinned)
+				Dock::setPinned(Dock::prepareGroup(app), true);
+			else if (!pin && pinned)
+				Dock::setPinned(pinned.get(), false);
+		}
+		else
+			return FALSE;
+		return TRUE;
 	}
 
 } // namespace Plugin

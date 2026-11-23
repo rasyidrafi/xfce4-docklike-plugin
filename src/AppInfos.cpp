@@ -229,6 +229,20 @@ namespace AppInfos
 			groupName = itRenamed->second;
 	}
 
+	std::shared_ptr<AppInfo> byDesktopId(const char* desktopId)
+	{
+		if (!desktopId || strchr(desktopId, '/') || !g_str_has_suffix(desktopId, ".desktop"))
+			return nullptr;
+		GDesktopAppInfo* desktop = g_desktop_app_info_new(desktopId);
+		if (!desktop)
+			return nullptr;
+		std::string path = g_desktop_app_info_get_filename(desktop);
+		g_object_unref(desktop);
+		std::string basename = path.substr(path.rfind('/') + 1);
+		auto info = mAppInfoIds.get(Help::String::toLowercase(basename.substr(0, basename.size() - 8)));
+		return info && info->path == path ? info : nullptr;
+	}
+
 	std::shared_ptr<AppInfo> search(std::string id)
 	{
 		id = Help::String::toLowercase(Help::String::trim(id));

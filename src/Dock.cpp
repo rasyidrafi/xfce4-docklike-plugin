@@ -190,7 +190,8 @@ namespace Dock
 
 		while (it != pinnedApps.end())
 		{
-			std::shared_ptr<AppInfo> appInfo = AppInfos::search(Help::String::toLowercase(*it));
+			auto appInfo = AppInfos::byDesktopId((*it + ".desktop").c_str());
+			if (!appInfo) appInfo = AppInfos::search(*it);
 			bool alreadyPinned = mGroups.findIf([&appInfo](std::pair<std::shared_ptr<AppInfo>, std::shared_ptr<Group>> entry) -> bool {
 				return entry.first == appInfo && entry.second->mPinned;
 			}) != nullptr;
