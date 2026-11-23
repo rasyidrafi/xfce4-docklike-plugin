@@ -29,6 +29,8 @@ struct AppInfo
 		: id(_id), path(_path), icon(_icon), name(_name), gAppInfo(_gAppInfo, [](gpointer o) { if (o) g_object_unref(o); }) {}
 	const gchar* const* get_actions() { return gAppInfo ? g_desktop_app_info_list_actions(gAppInfo.get()) : nullptr; };
 	void launch();
+	bool supportsNewWindow();
+	void launchAnother();
 	void launch_action(const gchar* action);
 	void edit();
 };

@@ -75,7 +75,13 @@ GroupMenuItem::GroupMenuItem(GroupWindow* groupWindow)
 	g_signal_connect(G_OBJECT(mItem), "button-press-event",
 		G_CALLBACK(+[](GtkWidget* widget, GdkEventButton* event, GroupMenuItem* me) {
 			if (event->button == GDK_BUTTON_PRIMARY)
-				me->mGroupWindow->activate((event)->time);
+				me->mGroupWindow->activate(event->time);
+			else if (event->button == GDK_BUTTON_SECONDARY) {
+				auto menu = GTK_WIDGET(g_object_ref_sink(Xfw::buildActionMenu(me->mGroupWindow, me->mGroupWindow->mGroup)));
+				xfce_panel_plugin_register_menu(Plugin::mXfPlugin, GTK_MENU(menu));
+				g_signal_connect(menu, "deactivate", G_CALLBACK(g_object_unref), nullptr);
+				gtk_menu_popup_at_pointer(GTK_MENU(menu), reinterpret_cast<GdkEvent*>(event));
+			}
 			return true;
 		}),
 		this);

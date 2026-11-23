@@ -848,7 +848,7 @@ void Group::onButtonPress(GdkEventButton* event)
 
 		if (mButton != nullptr)
 		{
-			GtkWidget* menu = GTK_WIDGET(g_object_ref_sink(Xfw::buildActionMenu(win.get(), this)));
+			GtkWidget* menu = GTK_WIDGET(g_object_ref_sink(Xfw::buildActionMenu(mWindowsCount == 1 ? mWindows.findIf([](GroupWindow* w) { return !w->getState(XFW_WINDOW_STATE_SKIP_TASKLIST); }) : nullptr, this)));
 			xfce_panel_plugin_register_menu(Plugin::mXfPlugin, GTK_MENU(menu));
 			g_signal_connect(menu, "deactivate", G_CALLBACK(g_object_unref), nullptr);
 			gtk_menu_popup_at_widget(GTK_MENU(menu), mButton, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, (GdkEvent*)event);
@@ -880,7 +880,9 @@ void Group::onButtonRelease(GdkEventButton* event)
 		}
 		}
 	}
-	else if (event->state & GDK_SHIFT_MASK || (mPinned && !mWindowsCount))
+	else if (event->state & GDK_SHIFT_MASK)
+		mAppInfo->launchAnother();
+	else if (mPinned && !mWindowsCount)
 		mAppInfo->launch();
 	else if (mActive)
 		mWindows.get(mTopWindowIndex)->minimize();

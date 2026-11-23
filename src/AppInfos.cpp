@@ -10,6 +10,26 @@
 
 #include <unordered_set>
 
+bool AppInfo::supportsNewWindow()
+{
+	auto actions = get_actions();
+	return (actions && g_strv_contains(actions, "new-window")) || id == "xfce4-terminal" || id == "thunar";
+}
+
+void AppInfo::launchAnother()
+{
+	auto actions = get_actions();
+	if (actions && g_strv_contains(actions, "new-window")) launch_action("new-window");
+	else if (id == "thunar" || id == "xfce4-terminal") {
+		const gchar* argv[] = {id.c_str(), "--window", nullptr};
+		GError* error = nullptr;
+		if (!g_spawn_async(nullptr, const_cast<gchar**>(argv), nullptr, G_SPAWN_SEARCH_PATH, nullptr, nullptr, nullptr, &error)) {
+			g_warning("Could not open new window: %s", error->message);
+			g_error_free(error);
+		}
+	} else launch();
+}
+
 void AppInfo::launch()
 {
 	GDesktopAppInfo* info = g_desktop_app_info_new_from_filename(this->path.c_str());
