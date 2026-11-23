@@ -36,10 +36,8 @@ namespace Plugin
 			g_dbus_method_invocation_return_error(invocation, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Unknown desktop ID: %s", id);
 			return;
 		}
-		auto pinned = Dock::mGroups.findIf([&app](const auto& entry) { return entry.first == app && entry.second->mPinned; });
-		if (write && desired && !pinned) Dock::setPinned(Dock::prepareGroup(app), true);
-		if (write && !desired && pinned) Dock::setPinned(pinned.get(), false);
-		g_dbus_method_invocation_return_value(invocation, g_variant_new("(b)", write ? desired : pinned != nullptr));
+		if (write) Dock::setAppPinned(app, desired);
+		g_dbus_method_invocation_return_value(invocation, g_variant_new("(b)", Dock::pinnedGroup(app) != nullptr));
 	}
 
 	static void exportPins(GDBusConnection* bus, const gchar*, gpointer)

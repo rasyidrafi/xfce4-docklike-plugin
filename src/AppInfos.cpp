@@ -10,17 +10,19 @@
 
 #include <unordered_set>
 
-bool AppInfo::supportsNewWindow()
+AppInfo::LaunchMode AppInfo::launchMode()
 {
 	auto actions = get_actions();
-	return (actions && g_strv_contains(actions, "new-window")) || id == "xfce4-terminal" || id == "thunar";
+	if (actions && g_strv_contains(actions, "new-window")) return LaunchMode::DesktopAction;
+	if (id == "xfce4-terminal" || id == "thunar") return LaunchMode::ExplicitWindow;
+	return LaunchMode::Default;
 }
 
 void AppInfo::launchAnother()
 {
-	auto actions = get_actions();
-	if (actions && g_strv_contains(actions, "new-window")) launch_action("new-window");
-	else if (id == "thunar" || id == "xfce4-terminal") {
+	auto mode = launchMode();
+	if (mode == LaunchMode::DesktopAction) launch_action("new-window");
+	else if (mode == LaunchMode::ExplicitWindow) {
 		const gchar* argv[] = {id.c_str(), "--window", nullptr};
 		GError* error = nullptr;
 		if (!g_spawn_async(nullptr, const_cast<gchar**>(argv), nullptr, G_SPAWN_SEARCH_PATH, nullptr, nullptr, nullptr, &error)) {

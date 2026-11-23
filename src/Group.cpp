@@ -6,6 +6,7 @@
  */
 
 #include "Group.hpp"
+#include "ContextAction.hpp"
 
 static GtkTargetEntry entries[1] = {{(gchar*)"application/docklike_group", 0, 0}};
 static GtkTargetList* targetList = gtk_target_list_new(entries, 1);
@@ -233,7 +234,10 @@ void Group::add(GroupWindow* window)
 
 void Group::remove(GroupWindow* window)
 {
+	auto index = mWindows.getIndex(window);
 	mWindows.pop(window);
+	if (mTopWindowIndex > index) --mTopWindowIndex;
+	if (mTopWindowIndex >= mWindows.size()) mTopWindowIndex = 0;
 	mWindowsCount.updateState();
 	mGroupMenu.remove(window->mGroupMenuItem);
 
@@ -858,6 +862,21 @@ void Group::onButtonPress(GdkEventButton* event)
 	}
 }
 
+void Group::runPrimaryAction(GdkEventButton* event)
+{
+	switch (ContextAction::choose(!mAppInfo->path.empty(), mAppInfo->supportsNewWindow(), mWindowsCount)) {
+	case ContextAction::Open: mAppInfo->launch(); break;
+	case ContextAction::NewWindow: mAppInfo->launchAnother(); break;
+	case ContextAction::ShowWindow: {
+		auto window = mWindows.findIf([](GroupWindow* w) { return !w->getState(XFW_WINDOW_STATE_SKIP_TASKLIST); });
+		if (window) window->activate(event->time);
+		break;
+	}
+	case ContextAction::ListWindows: mGroupMenu.popup(); break;
+	case ContextAction::Unavailable: break;
+	}
+}
+
 void Group::onButtonRelease(GdkEventButton* event)
 {
 	if (event->button == GDK_BUTTON_MIDDLE)
@@ -871,7 +890,7 @@ void Group::onButtonRelease(GdkEventButton* event)
 		}
 		case BEHAVIOR_LAUNCH_NEW:
 		{
-			mAppInfo->launchAnother();
+			runPrimaryAction(event);
 			break;
 		}
 		case BEHAVIOR_DO_NOTHING:
@@ -881,7 +900,7 @@ void Group::onButtonRelease(GdkEventButton* event)
 		}
 	}
 	else if (event->state & GDK_SHIFT_MASK)
-		mAppInfo->launchAnother();
+		runPrimaryAction(event);
 	else if (mPinned && !mWindowsCount)
 		mAppInfo->launch();
 	else if (mActive)

@@ -11,6 +11,7 @@
 
 #include "Xfw.hpp"
 #include "WindowIdentity.hpp"
+#include "ContextAction.hpp"
 
 namespace Xfw
 {
@@ -183,69 +184,83 @@ namespace Xfw
 		}
 	}
 
+	static std::list<GtkWidget*> actionMenus;
+	void dismissActionMenus()
+	{
+		while (!actionMenus.empty()) {
+			auto menu = actionMenus.front();
+			actionMenus.pop_front();
+			gtk_menu_popdown(GTK_MENU(menu));
+		}
+	}
+
 	GtkWidget* buildActionMenu(GroupWindow* groupWindow, Group* group)
 	{
 		auto menu = gtk_menu_new();
+		actionMenus.push_back(menu);
+		g_object_weak_ref(G_OBJECT(menu), +[](gpointer, GObject* object) { actionMenus.remove(reinterpret_cast<GtkWidget*>(object)); }, nullptr);
 		auto append = [](GtkWidget* parent, const char* label) {
 			auto item = gtk_menu_item_new_with_label(label);
 			gtk_menu_shell_append(GTK_MENU_SHELL(parent), item);
 			return item;
 		};
+		using Callback = std::function<void()>;
+		auto action = [&](GtkWidget* parent, const char* label, Callback fn) {
+			auto item = append(parent, label);
+			g_signal_connect_data(item, "activate", G_CALLBACK(+[](GtkMenuItem*, Callback* f) { (*f)(); }),
+				new Callback(std::move(fn)), +[](gpointer data, GClosure*) { delete static_cast<Callback*>(data); }, GConnectFlags(0));
+		};
 		auto app = group->mAppInfo;
+		using Window = std::shared_ptr<XfwWindow>;
+		auto retain = [](XfwWindow* w) { return Window(XFW_WINDOW(g_object_ref(w)), g_object_unref); };
+		std::vector<Window> targets;
+		if (groupWindow) targets.push_back(retain(groupWindow->mXfwWindow));
+		else group->mWindows.forEach([&](GroupWindow* w) {
+			if (!w->getState(XFW_WINDOW_STATE_SKIP_TASKLIST)) targets.push_back(retain(w->mXfwWindow));
+		});
+		auto focus = [](Window w) { auto live = mGroupWindows.get(w.get()); if (live) live->activate(gtk_get_current_event_time()); };
+		auto dismiss = [](Window w) { auto live = mGroupWindows.get(w.get()); if (live) close(live.get(), gtk_get_current_event_time()); };
+		gtk_widget_set_sensitive(append(menu, app->name.c_str()), FALSE);
+		if (groupWindow) {
+			auto title = xfw_window_get_name(groupWindow->mXfwWindow);
+			if (title && *title && app->name != title) gtk_widget_set_sensitive(append(menu, title), FALSE);
+		}
+		gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+		auto primary = ContextAction::choose(!app->path.empty(), app->supportsNewWindow(), targets.size());
+		if (primary == ContextAction::Open) {
+			auto label = g_strdup_printf(_("Open %s"), app->name.c_str());
+			action(menu, label, [app] { app->launch(); }); g_free(label);
+		} else if (primary == ContextAction::NewWindow) action(menu, _("New Window  (Shift+Click)"), [app] { app->launchAnother(); });
+		else if (primary == ContextAction::ShowWindow) action(menu, _("Show Window"), [focus, targets] { focus(targets.front()); });
+		if (targets.size() > 1) {
+			auto windows = gtk_menu_new();
+			auto label = g_strdup_printf(_("Windows (%u)"), unsigned(targets.size()));
+			gtk_menu_item_set_submenu(GTK_MENU_ITEM(append(menu, label)), windows); g_free(label);
+			for (auto w : targets) action(windows, xfw_window_get_name(w.get()), [focus, w] { focus(w); });
+		}
 		auto more = groupWindow ? xfw_window_action_menu_new(groupWindow->mXfwWindow) : gtk_menu_new();
 		if (!app->path.empty()) {
-			auto primary = append(menu, app->supportsNewWindow() ? _("New Window  (Shift+Click)") : _("Open Application"));
-			g_signal_connect(primary, "activate", G_CALLBACK(+[](GtkMenuItem*, AppInfo* info) { info->launchAnother(); }), app.get());
 			for (auto actions = app->get_actions(); actions && *actions; ++actions) {
-				if (g_str_equal(*actions, "new-window")) continue;
-				auto label = g_desktop_app_info_get_action_name(app->gAppInfo.get(), *actions);
-				auto item = append(menu, label);
-				g_free(label);
-				g_object_set_data_full(G_OBJECT(item), "action", g_strdup(*actions), g_free);
-				g_signal_connect(item, "activate", G_CALLBACK(+[](GtkMenuItem* i, AppInfo* info) {
-					info->launch_action(static_cast<const char*>(g_object_get_data(G_OBJECT(i), "action")));
-				}), app.get());
+				std::string id = *actions;
+				if (id == "new-window") continue;
+				auto label = g_desktop_app_info_get_action_name(app->gAppInfo.get(), id.c_str());
+				action(menu, label, [app, id] { app->launch_action(id.c_str()); }); g_free(label);
 			}
-			auto pin = append(menu, group->mPinned ? _("Unpin from Taskbar") : _("Pin to Taskbar"));
-			g_signal_connect(pin, "activate", G_CALLBACK(+[](GtkMenuItem*, Group* g) { Dock::setPinned(g, !g->mPinned); }), group);
-			auto editor = g_find_program_in_path("exo-desktop-item-edit");
-			if (editor) {
-				g_free(editor);
-				auto edit = append(more, _("Edit Launcher"));
-				g_signal_connect(edit, "activate", G_CALLBACK(+[](GtkMenuItem*, AppInfo* info) { info->edit(); }), app.get());
-			}
-		}
-		auto windowAction = [&](GtkWidget* parent, const char* label, GroupWindow* window, GCallback callback) {
-			auto item = append(parent, label);
-			g_object_set_data_full(G_OBJECT(item), "window", g_object_ref(window->mXfwWindow), g_object_unref);
-			g_signal_connect(item, "activate", callback, nullptr);
-		};
-		int count = group->mWindowsCount;
-		if (!groupWindow && count > 1) {
-			auto windows = gtk_menu_new();
-			auto label = g_strdup_printf(_("Windows (%d)"), count);
-			gtk_menu_item_set_submenu(GTK_MENU_ITEM(append(menu, label)), windows);
-			g_free(label);
-			group->mWindows.forEach([&](GroupWindow* w) {
-				if (!w->getState(XFW_WINDOW_STATE_SKIP_TASKLIST)) windowAction(windows, xfw_window_get_name(w->mXfwWindow), w, G_CALLBACK(+[](GtkMenuItem* i, gpointer) {
-					auto live = mGroupWindows.get(XFW_WINDOW(g_object_get_data(G_OBJECT(i), "window")));
-					if (live) live->activate(gtk_get_current_event_time());
-				}));
+			bool desired = !Dock::pinnedGroup(app);
+			action(menu, desired ? _("Pin to Taskbar") : _("Unpin from Taskbar"), [app, desired] {
+				Dock::setAppPinned(app, desired);
 			});
+			auto editor = g_find_program_in_path("exo-desktop-item-edit");
+			if (editor) { g_free(editor); action(more, _("Edit Launcher"), [app] { app->edit(); }); }
 		}
 		auto children = gtk_container_get_children(GTK_CONTAINER(more));
 		if (children) gtk_menu_item_set_submenu(GTK_MENU_ITEM(append(menu, _("More Options"))), more);
 		else { g_object_ref_sink(more); g_object_unref(more); }
 		g_list_free(children);
-		if (groupWindow) windowAction(menu, _("Close This Window"), groupWindow, G_CALLBACK(+[](GtkMenuItem* i, gpointer) {
-			auto live = mGroupWindows.get(XFW_WINDOW(g_object_get_data(G_OBJECT(i), "window")));
-			if (live) close(live.get(), gtk_get_current_event_time());
-		}));
-		else if (count > 1) {
-			auto label = g_strdup_printf(_("Close All %d Windows"), count);
-			auto item = append(menu, label);
-			g_free(label);
-			g_signal_connect(item, "activate", G_CALLBACK(+[](GtkMenuItem*, Group* g) { g->closeAll(); }), group);
+		if (targets.size() == 1) action(menu, _("Close This Window"), [dismiss, targets] { dismiss(targets.front()); });
+		else if (targets.size() > 1) {
+			auto label = g_strdup_printf(_("Close All %u Windows"), unsigned(targets.size()));
+			action(menu, label, [dismiss, targets] { for (const auto& w : targets) dismiss(w); }); g_free(label);
 		}
 		gtk_widget_show_all(menu);
 		return menu;

@@ -70,6 +70,7 @@ public:
 	void onWindowActivate(GroupWindow* groupWindow);
 	void onWindowUnactivate();
 	void onButtonPress(GdkEventButton* event);
+	void runPrimaryAction(GdkEventButton* event);
 	void onButtonRelease(GdkEventButton* event);
 	void onMouseEnter();
 	void onMouseLeave();

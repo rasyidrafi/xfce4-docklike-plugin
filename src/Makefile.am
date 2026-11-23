@@ -72,7 +72,8 @@ $(plugins_DATA): $(plugins_in_files) Makefile
 
 EXTRA_DIST = $(plugins_in_files)
 
-check_PROGRAMS = test-window-identity test-window-grouping
+check_PROGRAMS = test-window-identity test-window-grouping test-context-action
+test_context_action_SOURCES = test-context-action.cpp ContextAction.hpp
 TESTS = $(check_PROGRAMS)
 test_window_identity_SOURCES = test-window-identity.cpp WindowIdentity.hpp
 test_window_grouping_SOURCES = test-window-grouping.cpp WindowGrouping.hpp

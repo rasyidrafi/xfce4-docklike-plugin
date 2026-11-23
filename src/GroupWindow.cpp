@@ -155,8 +155,8 @@ void GroupWindow::updateState()
 {
 	bool onScreen = true;
 	bool onWorkspace = true;
-	bool onTasklist = !(mState & XfwWindowState::XFW_WINDOW_STATE_SKIP_TASKLIST);
 	mState = xfw_window_get_state(this->mXfwWindow);
+	bool onTasklist = !(mState & XFW_WINDOW_STATE_SKIP_TASKLIST);
 
 	if (Settings::onlyDisplayVisible)
 	{

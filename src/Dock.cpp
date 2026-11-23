@@ -90,6 +90,18 @@ namespace Dock
 			group->mAssignedWindow = nullptr;
 	}
 
+	std::shared_ptr<Group> pinnedGroup(std::shared_ptr<AppInfo> app)
+	{
+		return mGroups.findIf([&](const auto& entry) { return entry.first == app && entry.second->mPinned; });
+	}
+
+	void setAppPinned(std::shared_ptr<AppInfo> app, bool desired)
+	{
+		auto pinned = pinnedGroup(app);
+		if (desired && !pinned) setPinned(prepareGroup(app), true);
+		else if (!desired && pinned) setPinned(pinned.get(), false);
+	}
+
 	void setPinned(Group* group, bool pinned)
 	{
 		if (Settings::ungroupWindows && pinned)
@@ -136,7 +148,7 @@ namespace Dock
 			pin->mPinned = false;
 			pin->updateStyle();
 			next->mPinned = true;
-			if (pinPosition < nextPosition)
+			if (pinPosition >= 0 && nextPosition >= 0 && pinPosition != nextPosition)
 				gtk_box_reorder_child(GTK_BOX(mBox), next->mButton, pinPosition);
 			next->updateStyle();
 			savePinned();
@@ -177,6 +189,7 @@ namespace Dock
 
 	void drawGroups()
 	{
+		Xfw::dismissActionMenus();
 		mDrawingGroups = true;
 		// Destroy old window objects while their associated groups still exist.
 		Xfw::mGroupWindows.clear();

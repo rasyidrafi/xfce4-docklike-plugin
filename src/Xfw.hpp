@@ -29,6 +29,7 @@ namespace Xfw
 
 	XfwWindow* getActiveWindow();
 	std::string getGroupName(GroupWindow* groupWindow);
+	void dismissActionMenus();
 	GtkWidget* buildActionMenu(GroupWindow* groupWindow, Group* group);
 
 	void close(GroupWindow* groupWindow, guint32 timestamp);

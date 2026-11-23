@@ -31,6 +31,8 @@ namespace Dock
 	Group* prepareGroup(std::shared_ptr<AppInfo> appInfo);
 	Group* prepareWindowGroup(std::shared_ptr<AppInfo> appInfo, GroupWindow* window);
 	void releaseWindowGroup(Group* group, GroupWindow* window);
+	std::shared_ptr<Group> pinnedGroup(std::shared_ptr<AppInfo> app);
+	void setAppPinned(std::shared_ptr<AppInfo> app, bool desired);
 	void setPinned(Group* group, bool pinned);
 	void transferPin(Group* group);
 
